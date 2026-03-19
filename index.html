@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Cyber Device Dashboard</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+*{
+box-sizing:border-box;
+font-family:Segoe UI;
+}
+
+body{
+margin:0;
+background:radial-gradient(circle at top,#0f172a,#020617);
+color:white;
+}
+
+/* GRID */
+
+.container{
+display:grid;
+grid-template-columns:2fr 1fr;
+gap:20px;
+padding:20px;
+height:100vh;
+}
+
+.right{
+display:flex;
+flex-direction:column;
+gap:20px;
+}
+
+/* CARD */
+
+.card{
+background:#020617;
+border-radius:20px;
+padding:20px;
+box-shadow:0 0 20px rgba(0,140,255,0.3);
+}
+
+.title{
+display:flex;
+align-items:center;
+gap:10px;
+margin-bottom:15px;
+color:#38bdf8;
+}
+
+/* MAP */
+
+#map{
+height:100%;
+min-height:450px;
+border-radius:15px;
+}
+
+/* STATS */
+
+.stats{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:20px;
+}
+
+.stat{
+display:flex;
+align-items:center;
+justify-content:space-between;
+font-size:18px;
+}
+
+.stat i{
+font-size:26px;
+color:#38bdf8;
+}
+
+.value{
+font-size:24px;
+font-weight:bold;
+}
+
+/* FORM */
+
+input,select,button{
+width:100%;
+padding:12px;
+margin-top:10px;
+border-radius:10px;
+border:none;
+}
+
+input,select{
+background:#020617;
+border:1px solid #1e293b;
+color:white;
+}
+
+button{
+background:#0284c7;
+color:white;
+font-weight:bold;
+cursor:pointer;
+}
+
+button:hover{
+background:#0369a1;
+}
+
+/* CHART FIX */
+
+.chart-container{
+position:relative;
+height:250px;
+width:100%;
+}
+
+/* DEVICE ICON */
+
+.device-marker{
+position:relative;
+width:40px;
+height:40px;
+}
+
+.device-marker img{
+width:40px;
+height:40px;
+position:absolute;
+z-index:2;
+}
+
+.pulse{
+position:absolute;
+width:40px;
+height:40px;
+border-radius:50%;
+background:rgba(56,189,248,0.6);
+animation:pulse 2s infinite;
+z-index:1;
+}
+
+@keyframes pulse{
+
+0%{
+transform:scale(1);
+opacity:0.7;
+}
+
+70%{
+transform:scale(2.5);
+opacity:0;
+}
+
+100%{
+opacity:0;
+}
+
+}
+
+/* RESPONSIVE */
+
+@media(max-width:1000px){
+
+.container{
+grid-template-columns:1fr;
+height:auto;
+}
+
+#map{
+height:400px;
+}
+
+}
+
+@media(max-width:600px){
+
+.stats{
+grid-template-columns:1fr;
+}
+
+.value{
+font-size:20px;
+}
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<!-- MAP -->
+
+<div class="card">
+
+<div class="title">
+<i class="fa-solid fa-satellite-dish"></i>
+Live Device Map
+</div>
+
+<div id="map"></div>
+
+</div>
+
+<!-- RIGHT PANEL -->
+
+<div class="right">
+
+<!-- STATS -->
+
+<div class="stats">
+
+<div class="card stat">
+
+<div>
+<i class="fa-solid fa-users"></i> Users
+</div>
+
+<div id="totalUser" class="value">0</div>
+
+</div>
+
+<div class="card stat">
+
+<div>
+<i class="fa-solid fa-wallet"></i> Income
+</div>
+
+<div id="totalMoney" class="value">0</div>
+
+</div>
+
+</div>
+
+<!-- CHART -->
+
+<div class="card">
+
+<div class="title">
+<i class="fa-solid fa-chart-line"></i>
+User Statistics
+</div>
+
+<div class="chart-container">
+<canvas id="chartUsers"></canvas>
+</div>
+
+</div>
+
+<!-- FORM -->
+
+<div class="card">
+
+<div class="title">
+<i class="fa-solid fa-user-plus"></i>
+Device Management
+</div>
+
+<select id="mode">
+<option value="register">Register Device</option>
+<option value="extend">Perpanjang Paket</option>
+</select>
+
+<input id="nama" placeholder="Nama (register)">
+<input id="device" placeholder="ID Device">
+
+<select id="paket">
+<option value="7">7 Day - Rp10.000</option>
+<option value="15">15 Day - Rp20.000</option>
+<option value="30">30 Day - Rp30.000</option>
+</select>
+
+<button id="btnAction" onclick="submitAction()">Submit</button>
+
+<p id="msg"></p>
+
+</div>
+
+</div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+const API="https://script.google.com/macros/s/AKfycbxO4DLY8dwYycLhruVPJeyYkGR0pUzf73lWVT7wmnpBrF4UNW88stN6uULuwk9_7rxx/exec"
+
+let map=L.map('map').setView([-2.5,118],5)
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+maxZoom:18
+}).addTo(map)
+
+const phoneIcon=L.divIcon({
+className:'device-marker',
+html:`
+<div class="pulse"></div>
+<img src="https://cdn-icons-png.flaticon.com/512/545/545245.png">
+`,
+iconSize:[40,40]
+})
+
+let markers={}
+
+function loadStats(){
+
+fetch(API+"?action=stats")
+.then(r=>r.json())
+.then(data=>{
+
+document.getElementById("totalUser").innerText=data.total_user
+document.getElementById("totalMoney").innerText="Rp "+data.total_pendapatan
+
+})
+
+}
+
+function loadLocations(){
+
+fetch(API+"?action=locations")
+.then(r=>r.json())
+.then(users=>{
+
+users.forEach(u=>{
+
+if(!u.lokasi)return
+
+let coord=u.lokasi.split(",")
+
+let lat=parseFloat(coord[0])
+let lon=parseFloat(coord[1])
+
+if(markers[u.device]){
+
+markers[u.device].setLatLng([lat,lon])
+
+}else{
+
+markers[u.device]=L.marker([lat,lon],{icon:phoneIcon})
+.addTo(map)
+.bindPopup("<b>"+u.device+"</b><br>"+u.kota+"<br>"+u.negara)
+
+}
+
+})
+
+})
+
+}
+
+let processing=false
+
+function submitAction(){
+
+if(processing)return
+
+let mode=document.getElementById("mode").value
+let nama=document.getElementById("nama").value
+let device=document.getElementById("device").value
+let paket=document.getElementById("paket").value
+
+let btn=document.getElementById("btnAction")
+
+if(!device){
+document.getElementById("msg").innerText="ID Device wajib diisi"
+return
+}
+
+processing=true
+btn.disabled=true
+btn.innerText="Processing..."
+
+let params={
+action:mode,
+device:device,
+paket:paket
+}
+
+if(mode=="register"){
+params.nama=nama
+}
+
+fetch(API,{
+method:"POST",
+body:new URLSearchParams(params)
+})
+.then(r=>r.json())
+.then(d=>{
+
+document.getElementById("msg").innerText=d.msg
+
+loadStats()
+loadLocations()
+
+})
+.catch(()=>{
+document.getElementById("msg").innerText="Server error"
+})
+.finally(()=>{
+processing=false
+btn.disabled=false
+btn.innerText="Submit"
+})
+
+}
+
+const ctx=document.getElementById("chartUsers")
+
+new Chart(ctx,{
+type:"line",
+data:{
+labels:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+datasets:[{
+label:"User Growth",
+data:[5,10,12,18,20,30,40],
+borderColor:"#38bdf8",
+fill:false
+}]
+},
+options:{
+responsive:true,
+maintainAspectRatio:false
+}
+})
+
+loadStats()
+loadLocations()
+
+setInterval(loadStats,5000)
+setInterval(loadLocations,8000)
+
+window.addEventListener("resize",()=>{
+map.invalidateSize()
+})
+
+</script>
+
+</body>
+</html>
